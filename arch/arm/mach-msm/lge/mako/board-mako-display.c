@@ -769,19 +769,20 @@ static char n_gamma_b_setting[10] = {0xD5, 0x20, 0x23, 0x74, 0x00, 0x1F, 0x10, 0
 
 #if 0
 //calibration by molsearecoming 2nd rev 2nd varianr
-#define g_white       0x40
-#define g_mids        0x44
+#define g_white       0x72
+#define g_mids        0x15
 #define g_black       0x76
-#define g_contrast    0x1A
+#define g_contrast    0x00
 #define g_brightness  0x00
-#define g_saturation  0x48
+#define g_saturation  0x50
+#define g_greys       0x30
 
-static char p_gamma_r_setting[10] = {0xD0, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
-static char n_gamma_r_setting[10] = {0xD1, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
-static char p_gamma_g_setting[10] = {0xD2, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
-static char n_gamma_g_setting[10] = {0xD3, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
-static char p_gamma_b_setting[10] = {0xD4, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
-static char n_gamma_b_setting[10] = {0xD5, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, 0x30, 0x02};
+static char p_gamma_r_setting[10] = {0xD0, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
+static char n_gamma_r_setting[10] = {0xD1, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
+static char p_gamma_g_setting[10] = {0xD2, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
+static char n_gamma_g_setting[10] = {0xD3, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
+static char p_gamma_b_setting[10] = {0xD4, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
+static char n_gamma_b_setting[10] = {0xD5, g_white, g_mids, g_black, 0x00, g_contrast, g_brightness, g_saturation, g_greys, 0x02};
 #endif
 
 //Optimus G calibration
