@@ -57,7 +57,6 @@ struct lge_touch_data
 	void*			h_touch;
 	atomic_t		next_work;
 	atomic_t		device_init;
-	atomic_t		keypad_enable;
 	u8				work_sync_err_cnt;
 	u8				ic_init_err_cnt;
 	volatile int	curr_pwr_state;
@@ -1789,7 +1788,6 @@ static void touch_work_func_a(struct work_struct *work)
 	}
 
 	/* Button handle */
-	if (atomic_read(&ts->keypad_enable))
 	if (ts->ts_data.state != TOUCH_BUTTON_LOCK) {
 		/* do not check when there is no pressed button at error case
 		 * 	- if you check it, sometimes touch is locked becuase button pressed via IC error.
@@ -1879,18 +1877,12 @@ static bool is_in_section(struct rect rt, u16 x, u16 y)
 	return x >= rt.left && x <= rt.right && y >= rt.top && y <= rt.bottom;
 }
 
-static u16 find_button(struct lge_touch_data *ts)
+static u16 find_button(const struct t_data data, const struct section_info sc)
 {
 	int i;
 
-        const struct t_data data = ts->ts_data.curr_data[0];
-        const struct section_info sc = ts->st_info;
-
 	if (is_in_section(sc.panel, data.x_position, data.y_position))
 		return KEY_PANEL;
-
-        if (!atomic_read(&ts->keypad_enable))
-	        return KEY_BOUNDARY;
 
 	for(i=0; i<sc.b_num; i++){
 		if (is_in_section(sc.button[i], data.x_position, data.y_position))
@@ -1966,7 +1958,7 @@ static void touch_work_func_b(struct work_struct *work)
 			}
 		}
 
-		tmp_button = find_button(ts);
+		tmp_button = find_button(ts->ts_data.curr_data[id], ts->st_info);
 		if (unlikely(touch_debug_mask & DEBUG_BUTTON))
 			TOUCH_INFO_MSG("button_now [%d]\n", tmp_button);
 
@@ -3223,34 +3215,6 @@ static ssize_t show_ts_noise(struct lge_touch_data *ts, char *buf)
 	return ret;
 }
 #endif
-
-static ssize_t keypad_enable_read(struct lge_touch_data *ts, char *buf)
-{
-	return sprintf(buf, "%d\n", atomic_read(&ts->keypad_enable));
-}
-
-static int keypad_enable_store(struct lge_touch_data *ts, const char *buf, size_t count)
-{
-	unsigned int val = 0;
-
-	sscanf(buf, "%d", &val);
-	val = (val == 0 ? 0:1);
-	atomic_set(&ts->keypad_enable, val);
-	if (val) {
-		set_bit(KEY_BACK, ts->input_dev->keybit);
-		set_bit(KEY_MENU, ts->input_dev->keybit);
-		set_bit(KEY_HOME, ts->input_dev->keybit);
-		set_bit(KEY_SEARCH, ts->input_dev->keybit);
-	} else {
-		clear_bit(KEY_BACK, ts->input_dev->keybit);
-		clear_bit(KEY_MENU, ts->input_dev->keybit);
-		clear_bit(KEY_HOME, ts->input_dev->keybit);
-		clear_bit(KEY_SEARCH, ts->input_dev->keybit);
-	}
-	input_sync(ts->input_dev);
-	return count;
-}
-
 static LGE_TOUCH_ATTR(platform_data, S_IRUGO | S_IWUSR, show_platform_data, NULL);
 static LGE_TOUCH_ATTR(firmware, S_IRUGO | S_IWUSR, show_fw_info, store_fw_upgrade);
 static LGE_TOUCH_ATTR(fw_ver, S_IRUGO | S_IWUSR, show_fw_ver, NULL);
@@ -3273,7 +3237,6 @@ static LGE_TOUCH_ATTR(ghost_detection_enable, S_IRUGO | S_IWUSR, NULL, store_gho
 static LGE_TOUCH_ATTR(pen_enable, S_IRUGO | S_IWUSR, show_pen_enable, NULL);
 static LGE_TOUCH_ATTR(ts_noise, S_IRUGO | S_IWUSR, show_ts_noise, NULL);
 #endif
-static LGE_TOUCH_ATTR(keypad_enable, S_IRUGO | S_IWUSR, keypad_enable_read, keypad_enable_store);
 
 static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_platform_data.attr,
@@ -3298,7 +3261,6 @@ static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_pen_enable.attr,
 	&lge_touch_attr_ts_noise.attr,
 #endif
-	&lge_touch_attr_keypad_enable.attr,
 	NULL,
 };
 
@@ -3575,11 +3537,11 @@ static int touch_probe(struct i2c_client *client, const struct i2c_device_id *id
 	/* accuracy solution */
 	if (ts->pdata->role->accuracy_filter_enable){
 		ts->accuracy_filter.ignore_pressure_gap = 5;
-		ts->accuracy_filter.delta_max = 100;
+		ts->accuracy_filter.delta_max = 30;
 		ts->accuracy_filter.max_pressure = 255;
-		ts->accuracy_filter.time_to_max_pressure = one_sec / 25;
-		ts->accuracy_filter.direction_count = one_sec / 8;
-		ts->accuracy_filter.touch_max_count = one_sec / 3;
+		ts->accuracy_filter.time_to_max_pressure = one_sec / 20;
+		ts->accuracy_filter.direction_count = one_sec / 6;
+		ts->accuracy_filter.touch_max_count = one_sec / 2;
 	}
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
@@ -3588,8 +3550,6 @@ static int touch_probe(struct i2c_client *client, const struct i2c_device_id *id
 	ts->early_suspend.resume = touch_late_resume;
 	register_early_suspend(&ts->early_suspend);
 #endif
-
-        atomic_set(&ts->keypad_enable, 1);
 
 	/* Register sysfs for making fixed communication path to framework layer */
 	ret = sysdev_class_register(&lge_touch_sys_class);
@@ -3712,18 +3672,6 @@ static void touch_early_suspend(struct early_suspend *h)
 		return;
 	}
 
-#ifdef CUST_G_TOUCH
-	if (ts->pdata->role->ghost_detection_enable) {
-		resume_flag = 0;
-	}
-#endif
-
-#ifdef CUST_G_TOUCH
-	if (ts->pdata->role->ghost_detection_enable) {
-		hrtimer_cancel(&hr_touch_trigger_timer);
-	}
-#endif
-
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 	if (prevent_sleep) {
 		enable_irq_wake(ts->client->irq);
@@ -3731,10 +3679,21 @@ static void touch_early_suspend(struct early_suspend *h)
 	} else
 #endif
 	{
+#ifdef CUST_G_TOUCH
+		if (ts->pdata->role->ghost_detection_enable) {
+			resume_flag = 0;
+		}
+#endif
+
 		if (ts->pdata->role->operation_mode)
 			disable_irq(ts->client->irq);
 		else
 			hrtimer_cancel(&ts->timer);
+#ifdef CUST_G_TOUCH
+		if (ts->pdata->role->ghost_detection_enable) {
+			hrtimer_cancel(&hr_touch_trigger_timer);
+		}
+#endif
 
 		cancel_work_sync(&ts->work);
 		cancel_delayed_work_sync(&ts->work_init);
@@ -3771,13 +3730,6 @@ static void touch_late_resume(struct early_suspend *h)
 		return;
 	}
 
-#ifdef CUST_G_TOUCH
-	if (ts->pdata->role->ghost_detection_enable) {
-		resume_flag = 1;
-		ts_rebase_count = 0;
-	}
-#endif
-
 #ifdef CONFIG_TOUCHSCREEN_PREVENT_SLEEP
 	if (prevent_sleep)
 		disable_irq_wake(ts->client->irq);
@@ -3785,6 +3737,12 @@ static void touch_late_resume(struct early_suspend *h)
 #endif
 	{
 		touch_power_cntl(ts, ts->pdata->role->resume_pwr);
+#ifdef CUST_G_TOUCH
+		if (ts->pdata->role->ghost_detection_enable) {
+			resume_flag = 1;
+			ts_rebase_count = 0;
+		}
+#endif
 
 		if (ts->pdata->role->operation_mode)
 			enable_irq(ts->client->irq);
@@ -3886,4 +3844,3 @@ void touch_driver_unregister(void)
 	if (touch_wq)
 		destroy_workqueue(touch_wq);
 }
-
