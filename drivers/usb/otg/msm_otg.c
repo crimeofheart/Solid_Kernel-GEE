@@ -1170,6 +1170,7 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 
 	if (motg->cur_power == mA)
 		return;
+		
 #ifdef CONFIG_FORCE_FAST_CHARGE
   if (force_fast_charge == 1) {
       mA = USB_FASTCHG_LOAD;
@@ -1180,8 +1181,14 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 #endif 
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
 
-	pm8921_charger_vbus_draw(mA);
-	msm_otg_notify_power_supply(motg, mA);
+	/*
+	 *  Use Power Supply API if supported, otherwise fallback
+	 *  to legacy pm8921 API.
+	 */
+//	if (msm_otg_notify_power_supply(motg, mA))
+
+		pm8921_charger_vbus_draw(mA);
+	  	msm_otg_notify_power_supply(motg, mA);
 
 	motg->cur_power = mA;
 }
@@ -2328,7 +2335,77 @@ static void msm_otg_sm_work(struct work_struct *w)
 				test_bit(ID_A, &motg->inputs)) && otg->host) {
 			pr_debug("!id || id_A\n");
 			if (slimport_is_connected()) {
+<<<<<<< HEAD
 				work = 1;
+=======
+				pr_info("%s: slimport_is_connected() !!!\n",__func__);
+				clear_bit(A_BUS_REQ, &motg->inputs);
+
+				if(test_bit(B_SESS_VLD, &motg->inputs)){
+					pr_info("b_sess_vld with SLIMPORT\n");
+					switch (motg->chg_state) {
+					case USB_CHG_STATE_UNDEFINED:
+						msm_chg_detect_work(&motg->chg_work.work);
+						break;
+					case USB_CHG_STATE_DETECTED:
+						pr_info("msm_otg: detected charger type=%d\n",motg->chg_type);
+						switch (motg->chg_type) {
+						case USB_DCP_CHARGER:
+
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4 //to know usb state on touch driver
+			                trigger_baseline_state_machine(1,0);
+#endif
+
+							/* Enable VDP_SRC */
+							ulpi_write(otg->phy, 0x2, 0x85);
+							/* fall through */
+						case USB_PROPRIETARY_CHARGER:
+							msm_otg_notify_charger(motg,
+									IDEV_CHG_MAX);
+							pm_runtime_put_noidle(otg->phy->dev);
+							pm_runtime_suspend(otg->phy->dev);
+							break;
+						case USB_CDP_CHARGER:
+							msm_otg_notify_charger(motg,
+									IDEV_CHG_MAX);
+//							msm_otg_start_peripheral(otg, 1);
+//							otg->phy->state =
+//								OTG_STATE_B_PERIPHERAL;
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4 //to know usb state on touch driver
+			                trigger_baseline_state_machine(1,1);
+#endif
+							break;
+						case USB_SDP_CHARGER:
+#ifdef CONFIG_FORCE_FAST_CHARGE
+	  	  	  	    if (force_fast_charge == 1){
+							ulpi_write(otg->phy, 0x2, 0x85);
+						motg->chg_type = USB_DCP_CHARGER;
+	  	  	  	      }
+#endif
+#ifdef CONFIG_LGE_PM
+							msm_otg_notify_charger(motg,
+									IDEV_CHG_MIN);
+#endif
+#ifdef CONFIG_TOUCHSCREEN_SYNAPTICS_I2C_RMI4 //to know usb state on touch driver
+			                trigger_baseline_state_machine(1,1);
+#endif
+//							msm_otg_start_peripheral(otg, 1);
+//							otg->phy->state =
+//								OTG_STATE_B_PERIPHERAL;
+							break;
+						default:
+							pr_info("chg type is unknown\n");
+							break;
+						}
+						break;
+					default:
+						break;
+					}					
+					
+				}
+				
+			    work = 0;			    
+>>>>>>> 6d034cd... fast charge fixes
 				break;
 			}
 			if (msm_chg_mhl_detect(motg)) {
