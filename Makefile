@@ -1,7 +1,7 @@
 VERSION = 3
 PATCHLEVEL = 4
 SUBLEVEL = 105
-EXTRAVERSION = _Solid_Kernel_v1.5_cohmod_GEE-KK_STOCK-CAM
+EXTRAVERSION = _Solid_Kernel_v1.5_GEE-KK_STOCK-CAM
 NAME = Saber-toothed Squirrel
 
 # *DOCUMENTATION*
